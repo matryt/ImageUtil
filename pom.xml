@@ -10,6 +10,10 @@
 
     <name>ImageUtil</name>
     <description>Utilitaire Swing pour redimensionner et compresser des images</description>
+    <inceptionYear>2026</inceptionYear>
+    <organization>
+        <name>ImageUtil</name>
+    </organization>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -53,5 +57,55 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <profile>
+            <id>exe</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>com.akathist.maven.plugins.launch4j</groupId>
+                        <artifactId>launch4j-maven-plugin</artifactId>
+                        <version>2.7.0</version>
+                        <executions>
+                            <execution>
+                                <id>launch4j-exe</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>launch4j</goal>
+                                </goals>
+                                <configuration>
+                                    <headerType>gui</headerType>
+                                    <outfile>${project.build.directory}/ImageUtil.exe</outfile>
+                                    <jar>${project.build.directory}/ImageUtil.jar</jar>
+                                    <dontWrapJar>false</dontWrapJar>
+                                    <errTitle>ImageUtil</errTitle>
+                                    <jre>
+                                        <path>jre</path>
+                                        <minVersion>21</minVersion>
+                                        <requires64Bit>true</requires64Bit>
+                                        <opts>
+                                            <opt>-Dfile.encoding=UTF-8</opt>
+                                        </opts>
+                                    </jre>
+                                    <versionInfo>
+                                        <fileVersion>1.0.0.0</fileVersion>
+                                        <txtFileVersion>1.0.0</txtFileVersion>
+                                        <fileDescription>ImageUtil - Redimensionnement et compression d'images</fileDescription>
+                                        <copyright>ImageUtil</copyright>
+                                        <productVersion>1.0.0.0</productVersion>
+                                        <txtProductVersion>1.0.0</txtProductVersion>
+                                        <productName>ImageUtil</productName>
+                                        <internalName>ImageUtil</internalName>
+                                        <originalFilename>ImageUtil.exe</originalFilename>
+                                    </versionInfo>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>
 

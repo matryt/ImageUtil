@@ -8,106 +8,48 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: build-exe-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-windows-exe:
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up JDK 21 (Temurin)
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "21"
-          cache: maven
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-      - name: Build and run tests with Maven
-        run: mvn -B clean test package
+      - name: Build Windows EXE via Docker
+        run: docker buildx build --platform linux/amd64 --output type=local,dest=./dist .
 
-      - name: Prepare jlink slim runtime & input
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path target/jpackage-input | Out-Null
-          Copy-Item target/ImageUtil.jar target/jpackage-input/
-          jlink `
-            --add-modules java.base,java.desktop `
-            --strip-debug `
-            --no-man-pages `
-            --no-header-files `
-            --compress=zip-6 `
-            --output target/runtime
-
-      - name: Build portable EXE bundle (app-image)
-        shell: pwsh
-        run: |
-          jpackage `
-            --type app-image `
-            --name ImageUtil `
-            --app-version 1.0.0 `
-            --vendor "ImageUtil" `
-            --description "Utilitaire de redimensionnement et compression d'images" `
-            --input target/jpackage-input `
-            --main-jar ImageUtil.jar `
-            --main-class com.imageutil.Main `
-            --runtime-image target/runtime `
-            --dest target/dist-portable
-
-          Compress-Archive `
-            -Path target/dist-portable/ImageUtil/* `
-            -DestinationPath target/ImageUtil-windows-portable.zip
-
-      - name: Ensure WiX Toolset v3 is installed
-        shell: pwsh
-        run: |
-          if (-not (Get-Command candle.exe -ErrorAction SilentlyContinue)) {
-            choco install wixtoolset -y --no-progress
-          }
-
-      - name: Build Windows installer (.exe)
-        shell: pwsh
-        run: |
-          $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
-          jpackage `
-            --type exe `
-            --name ImageUtil `
-            --app-version 1.0.0 `
-            --vendor "ImageUtil" `
-            --description "Utilitaire de redimensionnement et compression d'images" `
-            --input target/jpackage-input `
-            --main-jar ImageUtil.jar `
-            --main-class com.imageutil.Main `
-            --runtime-image target/runtime `
-            --win-dir-chooser `
-            --win-menu `
-            --win-shortcut `
-            --dest target/dist-exe
-
-      - name: Upload Windows EXE installer artifact
+      - name: Upload Windows EXE artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ImageUtil-windows-installer
-          path: target/dist-exe/*.exe
+          name: ImageUtil-windows-exe
+          path: dist/ImageUtil.exe
 
       - name: Upload Windows portable ZIP artifact
         uses: actions/upload-artifact@v4
         with:
           name: ImageUtil-windows-portable
-          path: target/ImageUtil-windows-portable.zip
+          path: dist/ImageUtil-windows-portable.zip
 
       - name: Upload runnable JAR artifact
         uses: actions/upload-artifact@v4
         with:
           name: ImageUtil-jar
-          path: target/ImageUtil.jar
+          path: dist/ImageUtil.jar
 
       - name: Publish GitHub Release on tag
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            target/dist-exe/*.exe
-            target/ImageUtil-windows-portable.zip
-            target/ImageUtil.jar
-
+            dist/ImageUtil.exe
+            dist/ImageUtil-windows-portable.zip
+            dist/ImageUtil.jar

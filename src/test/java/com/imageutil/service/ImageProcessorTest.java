@@ -177,6 +177,67 @@ class ImageProcessorTest {
     }
 
     @Test
+    void testExifOrientationPortraitPreserved() throws IOException {
+        // Crée un JPEG brut 800x400 avec moitié gauche rouge et moitié droite bleue
+        BufferedImage raw = new BufferedImage(800, 400, BufferedImage.TYPE_INT_RGB);
+        Graphics2D g = raw.createGraphics();
+        try {
+            g.setColor(Color.RED);
+            g.fillRect(0, 0, 400, 400);
+            g.setColor(Color.BLUE);
+            g.fillRect(400, 0, 400, 400);
+        } finally {
+            g.dispose();
+        }
+        Path rawJpg = tempDir.resolve("raw.jpg");
+        ImageIO.write(raw, "jpeg", rawJpg.toFile());
+
+        // Injecte un segment APP1 EXIF Orientation = 6 (rotation 90° horaire -> portrait 400x800)
+        byte[] rawBytes = Files.readAllBytes(rawJpg);
+        byte[] app1 = new byte[]{
+                (byte) 0xFF, (byte) 0xE1,
+                0x00, 0x22, // longueur = 34 (2 + 6 + 8 + 2 + 12 + 4)
+                'E', 'x', 'i', 'f', 0x00, 0x00,
+                'M', 'M', 0x00, 0x2A, 0x00, 0x00, 0x00, 0x08, // TIFF BE, IFD0 @ 8
+                0x00, 0x01, // 1 entrée
+                0x01, 0x12, 0x00, 0x03, 0x00, 0x00, 0x00, 0x01, 0x00, 0x06, 0x00, 0x00, // Orientation = 6
+                0x00, 0x00, 0x00, 0x00 // next IFD = 0
+        };
+        byte[] withExif = new byte[rawBytes.length + app1.length];
+        withExif[0] = rawBytes[0]; // 0xFF
+        withExif[1] = rawBytes[1]; // 0xD8
+        System.arraycopy(app1, 0, withExif, 2, app1.length);
+        System.arraycopy(rawBytes, 2, withExif, 2 + app1.length, rawBytes.length - 2);
+
+        Path portraitExif = tempDir.resolve("portrait_exif.jpg");
+        Files.write(portraitExif, withExif);
+
+        assertEquals(6, ExifOrientationUtil.readOrientation(portraitExif));
+        Dimension displayedDim = processor.readImageDimensions(portraitExif);
+        assertNotNull(displayedDim);
+        assertEquals(400, displayedDim.width);
+        assertEquals(800, displayedDim.height);
+
+        ProcessingOptions opts = new ProcessingOptions(
+                ResizeMode.PERCENTAGE, 50, 100, 100, ExactRatioMode.NONE, false,
+                OutputFormat.JPEG, 90, tempDir.resolve("exif_out"), false, "", true
+        );
+        ProcessingResult result = processor.process(portraitExif, opts);
+        assertTrue(result.success());
+        assertEquals(400, result.originalWidth());
+        assertEquals(800, result.originalHeight());
+        assertEquals(200, result.newWidth());
+        assertEquals(400, result.newHeight());
+
+        // Après rotation 90° horaire, la moitié gauche (rouge) se retrouve en haut
+        BufferedImage output = ImageIO.read(result.outputFile().toFile());
+        Color topColor = new Color(output.getRGB(100, 50));
+        Color bottomColor = new Color(output.getRGB(100, 350));
+        assertTrue(topColor.getRed() > 200 && topColor.getBlue() < 50);
+        assertTrue(bottomColor.getBlue() > 200 && bottomColor.getRed() < 50);
+    }
+
+    @Test
     void testIsSupportedImage() throws IOException {
         Path txt = Files.writeString(tempDir.resolve("notes.txt"), "hello");
         Path jpg = createSampleImage("pic.jpg", 10, 10, false);

@@ -27,7 +27,8 @@ import java.util.Locale;
 import java.util.Set;
 
 /**
- * Service de redimensionnement et de compression d'images basé sur Java ImageIO et Graphics2D.
+ * Service de redimensionnement et de compression d'images basé sur Java ImageIO
+ * et Graphics2D.
  */
 public class ImageProcessor {
 
@@ -46,7 +47,8 @@ public class ImageProcessor {
     }
 
     /**
-     * Lit rapidement les dimensions d'une image sans charger toute la bitmap si le reader le supporte.
+     * Lit rapidement les dimensions d'une image sans charger toute la bitmap si le
+     * reader le supporte.
      */
     public Dimension readImageDimensions(Path path) throws IOException {
         try (ImageInputStream iis = ImageIO.createImageInputStream(path.toFile())) {
@@ -60,7 +62,13 @@ public class ImageProcessor {
             ImageReader reader = readers.next();
             try {
                 reader.setInput(iis, true, true);
-                return new Dimension(reader.getWidth(0), reader.getHeight(0));
+                int width = reader.getWidth(0);
+                int height = reader.getHeight(0);
+                int orientation = ExifOrientationUtil.readOrientation(path);
+                if (ExifOrientationUtil.swapsDimensions(orientation)) {
+                    return new Dimension(height, width);
+                }
+                return new Dimension(width, height);
             } finally {
                 reader.dispose();
             }
@@ -81,6 +89,9 @@ public class ImageProcessor {
             if (source == null) {
                 return ProcessingResult.failure(inputFile, "Format d'image non reconnu ou fichier corrompu");
             }
+
+            int orientation = ExifOrientationUtil.readOrientation(inputFile);
+            source = ExifOrientationUtil.applyOrientation(source, orientation);
 
             int origW = source.getWidth();
             int origH = source.getHeight();
@@ -112,10 +123,10 @@ public class ImageProcessor {
                     writable.getWidth(),
                     writable.getHeight(),
                     originalSize,
-                    newSize
-            );
+                    newSize);
         } catch (Exception e) {
-            return ProcessingResult.failure(inputFile, e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName());
+            return ProcessingResult.failure(inputFile,
+                    e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName());
         }
     }
 
@@ -179,7 +190,8 @@ public class ImageProcessor {
     }
 
     /**
-     * Redimensionne l'image avec réduction progressive par paliers pour un rendu net.
+     * Redimensionne l'image avec réduction progressive par paliers pour un rendu
+     * net.
      */
     public BufferedImage resizeImage(BufferedImage source, int targetWidth, int targetHeight) {
         int type = (source.getTransparency() == Transparency.OPAQUE)
@@ -190,7 +202,8 @@ public class ImageProcessor {
         int currentW = source.getWidth();
         int currentH = source.getHeight();
 
-        // Réduction progressive par moitié tant que l'image fait plus du double de la taille cible
+        // Réduction progressive par moitié tant que l'image fait plus du double de la
+        // taille cible
         while (currentW / 2 >= targetWidth && currentH / 2 >= targetHeight) {
             int nextW = Math.max(targetWidth, currentW / 2);
             int nextH = Math.max(targetHeight, currentH / 2);
@@ -211,8 +224,7 @@ public class ImageProcessor {
             int width,
             int height,
             int imageType,
-            Object interpolationHint
-    ) {
+            Object interpolationHint) {
         BufferedImage dest = new BufferedImage(width, height, imageType);
         Graphics2D g2 = dest.createGraphics();
         try {
@@ -227,7 +239,8 @@ public class ImageProcessor {
     }
 
     /**
-     * Convertit les images transparentes en RGB sur fond blanc pour les formats sans canal alpha (JPEG, BMP).
+     * Convertit les images transparentes en RGB sur fond blanc pour les formats
+     * sans canal alpha (JPEG, BMP).
      */
     private BufferedImage normalizeColorSpace(BufferedImage image, String ioFormat) {
         boolean supportsAlpha = "png".equalsIgnoreCase(ioFormat) || "gif".equalsIgnoreCase(ioFormat);
@@ -253,8 +266,7 @@ public class ImageProcessor {
             BufferedImage image,
             String ioFormat,
             int qualityPercent,
-            Path outputFile
-    ) throws IOException {
+            Path outputFile) throws IOException {
         Iterator<ImageWriter> writers = ImageIO.getImageWritersByFormatName(ioFormat);
         if (!writers.hasNext()) {
             throw new IOException("Aucun encodeur disponible pour le format : " + ioFormat);
@@ -285,7 +297,8 @@ public class ImageProcessor {
     }
 
     /**
-     * Résout le chemin du fichier de sortie en gérant les collisions si overwriteExisting est désactivé.
+     * Résout le chemin du fichier de sortie en gérant les collisions si
+     * overwriteExisting est désactivé.
      */
     public Path resolveOutputPath(Path inputFile, ProcessingOptions options, String extension) {
         Path parentDir = options.useSubfolderCompressed()
@@ -324,4 +337,3 @@ public class ImageProcessor {
         return String.format(Locale.FRANCE, "%.2f Mo", mb);
     }
 }
-
